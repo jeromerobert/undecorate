@@ -4,16 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAXSTR 1000
-#define _NET_WM_STATE_REMOVE 0 /* remove/unset property */
-#define _NET_WM_STATE_ADD 1    /* add/set property */
-#define _NET_WM_STATE_TOGGLE 2 /* toggle property  */
 Display *display;
 unsigned long window;
 unsigned char *prop;
 
 // https://github.com/UltimateHackingKeyboard/current-window-linux/blob/master/get-current-window.c
-void check_status(int status, unsigned long window)
+static void check_status(int status, unsigned long window)
 {
     if (status == BadWindow)
     {
@@ -28,69 +24,24 @@ void check_status(int status, unsigned long window)
     }
 }
 
-unsigned char *get_string_property(char *property_name)
+static unsigned char *get_string_property(char *property_name)
 {
     Atom actual_type, filter_atom;
     int actual_format, status;
     unsigned long nitems, bytes_after;
 
     filter_atom = XInternAtom(display, property_name, True);
-    status = XGetWindowProperty(display, window, filter_atom, 0, MAXSTR, False, AnyPropertyType,
+    status = XGetWindowProperty(display, window, filter_atom, 0, 4096, False, AnyPropertyType,
                                 &actual_type, &actual_format, &nitems, &bytes_after, &prop);
     check_status(status, window);
     return prop;
 }
 
-unsigned long get_long_property(char *property_name)
+static unsigned long get_long_property(char *property_name)
 {
     get_string_property(property_name);
     unsigned long long_property = prop[0] + (prop[1] << 8) + (prop[2] << 16) + (prop[3] << 24);
     return long_property;
-}
-
-// https://stackoverflow.com/questions/7365256/xlib-how-to-check-if-a-window-is-minimized-or-not
-int contains_atom(char *property_name, char *atom)
-{
-    Atom actual_type, filter_atom, tocheck;
-    int actual_format, status;
-    unsigned long nitems, bytes_after;
-    Atom *atoms;
-
-    filter_atom = XInternAtom(display, property_name, True);
-    status = XGetWindowProperty(display, window, filter_atom, 0, MAXSTR, False, XA_ATOM,
-                                &actual_type, &actual_format, &nitems, &bytes_after, (unsigned char **)&atoms);
-    check_status(status, window);
-    tocheck = XInternAtom(display, atom, True);
-    for (int i = 0; i < nitems; i++)
-    {
-        if (atoms[i] == tocheck)
-        {
-            XFree(atoms);
-            return 1;
-        }
-    }
-    XFree(atoms);
-    return 0;
-}
-
-// https://stackoverflow.com/questions/4530786/xlib-create-window-in-mimized-or-maximized-state
-void set_maximized(int enable)
-{
-    XEvent xev;
-    Atom wm_state = XInternAtom(display, "_NET_WM_STATE", False);
-    Atom max_horz = XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
-    Atom max_vert = XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
-
-    memset(&xev, 0, sizeof(xev));
-    xev.type = ClientMessage;
-    xev.xclient.window = window;
-    xev.xclient.message_type = wm_state;
-    xev.xclient.format = 32;
-    xev.xclient.data.l[0] = enable ? _NET_WM_STATE_ADD : _NET_WM_STATE_REMOVE;
-    xev.xclient.data.l[1] = max_horz;
-    xev.xclient.data.l[2] = max_vert;
-
-    XSendEvent(display, DefaultRootWindow(display), False, SubstructureNotifyMask, &xev);
 }
 
 // https://gist.github.com/muktupavels/d03bb14ea6042b779df89b4c87df975d
@@ -103,7 +54,7 @@ typedef struct
     unsigned long status;
 } MotifWmHints;
 
-static MotifWmHints *get_motif_wm_hints(Display *display, Window window)
+static MotifWmHints *get_motif_wm_hints()
 {
     Atom property;
     int result;
@@ -139,9 +90,7 @@ static MotifWmHints *get_motif_wm_hints(Display *display, Window window)
     return NULL;
 }
 
-static void
-toggle_window_decorations(Display *display,
-                          Window window)
+static void toggle_window_decorations()
 {
     MotifWmHints *hints;
     Atom property;
@@ -169,7 +118,6 @@ toggle_window_decorations(Display *display,
 int main(int argc, char **argv)
 {
     char *display_name = NULL; // could be the value of $DISPLAY
-
     display = XOpenDisplay(display_name);
     if (display == NULL)
     {
@@ -177,19 +125,8 @@ int main(int argc, char **argv)
     }
     int screen = XDefaultScreen(display);
     window = RootWindow(display, screen);
-
     window = get_long_property("_NET_ACTIVE_WINDOW");
-
-    printf("_NET_WM_PID: %lu\n", get_long_property("_NET_WM_PID"));
-    printf("WM_CLASS: %s\n", get_string_property("WM_CLASS"));
-    printf("_NET_WM_NAME: %s\n", get_string_property("_NET_WM_NAME"));
-    int maximized = contains_atom("_NET_WM_STATE", "_NET_WM_STATE_MAXIMIZED_HORZ") &&
-                    contains_atom("_NET_WM_STATE", "_NET_WM_STATE_MAXIMIZED_VERT");
-    if (maximized)
-        set_maximized(0);
     toggle_window_decorations(display, window);
-    if (maximized)
-        set_maximized(1);
     XCloseDisplay(display);
     return 0;
 }
