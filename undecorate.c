@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-Display *display;
-unsigned long window;
-unsigned char *prop;
+static Display *display;
+static unsigned long window;
+static unsigned char *prop;
 
 // https://github.com/UltimateHackingKeyboard/current-window-linux/blob/master/get-current-window.c
 static void check_status(int status, unsigned long window)
@@ -123,9 +123,18 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "%s:  unable to open display '%s'\n", argv[0], XDisplayName(display_name));
     }
-    int screen = XDefaultScreen(display);
-    window = RootWindow(display, screen);
-    window = get_long_property("_NET_ACTIVE_WINDOW");
+    window = 0;
+    if (argc > 1) {
+        sscanf (argv[1], "0x%lx", &window);
+        if (window == 0)
+            sscanf (argv[1], "%lu", &window);
+    }
+    if(window == 0) {
+        int screen = XDefaultScreen(display);
+        window = RootWindow(display, screen);
+        window = get_long_property("_NET_ACTIVE_WINDOW");
+    }
+    printf("Toggling decoration on windows %x\n", window);
     toggle_window_decorations(display, window);
     XCloseDisplay(display);
     return 0;
